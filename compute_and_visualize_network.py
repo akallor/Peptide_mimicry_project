@@ -16,9 +16,37 @@ import logging
 from typing import Tuple, Dict
 import colorsys
 
-def load_network_data(network_file: Path) -> pd.DataFrame:
-    """Load network data from TSV file."""
-    return pd.read_csv(network_file, sep='\t')
+def load_network_data(network_file: Path, threshold: float = None) -> pd.DataFrame:
+    """
+    Load network data from TSV file.
+    Optionally filter by similarity threshold.
+    """
+    df = pd.read_csv(network_file, sep='\t')
+    if threshold is not None:
+        df = df[df['weight'] >= threshold].copy()
+        print(f"\nFiltering with threshold {threshold}:")
+        print(f"Original pairs: {len(df)}")
+        
+        # Analyze similarity distribution
+        print("\nSimilarity score distribution:")
+        print(df['weight'].describe())
+        
+        # Count unique peptides
+        unique_sources = df['source'].nunique()
+        unique_targets = df['target'].nunique()
+        print(f"\nUnique human peptides (hubs): {unique_sources}")
+        print(f"Unique pathogen peptides (spokes): {unique_targets}")
+        
+        # Sample some high-similarity pairs
+        print("\nSample of highest similarity pairs:")
+        top_pairs = df.nlargest(5, 'weight')
+        for _, row in top_pairs.iterrows():
+            print(f"Human: {row['source']}")
+            print(f"Pathogen: {row['target']}")
+            print(f"Similarity: {row['weight']:.3f}")
+            print("---")
+    
+    return df
 
 def create_graph(df: pd.DataFrame) -> nx.Graph:
     """Create networkx graph from DataFrame."""
@@ -69,6 +97,30 @@ def generate_distinct_colors(n: int) -> list:
         rgb = colorsys.hsv_to_rgb(hue, saturation, value)
         colors.append(f'rgb({int(rgb[0]*255)},{int(rgb[1]*255)},{int(rgb[2]*255)})')
     return colors
+
+def analyze_sequence_similarity(df: pd.DataFrame):
+    """Analyze and print sequence similarity patterns."""
+    # Calculate similarity statistics per hub
+    hub_stats = df.groupby('source').agg({
+        'target': 'count',
+        'weight': ['mean', 'min', 'max']
+    }).round(3)
+    
+    hub_stats.columns = ['num_matches', 'avg_similarity', 'min_similarity', 'max_similarity']
+    hub_stats = hub_stats.sort_values('num_matches', ascending=False)
+    
+    print("\nTop 10 hubs by number of matches:")
+    print(hub_stats.head(10))
+    
+    # Analyze similarity distribution
+    similarity_ranges = pd.cut(df['weight'], 
+                             bins=[0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0],
+                             labels=['0.70-0.75', '0.75-0.80', '0.80-0.85', 
+                                   '0.85-0.90', '0.90-0.95', '0.95-1.00'])
+    
+    range_counts = similarity_ranges.value_counts().sort_index()
+    print("\nDistribution of similarity scores:")
+    print(range_counts)
 
 def create_network_visualization(G: nx.Graph, output_file: Path):
     """Create interactive network visualization using plotly."""
@@ -180,14 +232,19 @@ def main():
                       help='Path to network TSV file')
     parser.add_argument('--output', type=str, default='network_visualization.html',
                       help='Output HTML file path (default: network_visualization.html)')
+    parser.add_argument('--threshold', type=float, default=None,
+                      help='Similarity threshold for filtering (e.g., 0.9 for highly similar sequences)')
     
     args = parser.parse_args()
     
     # Load and process data
     print("Loading network data...")
-    df = load_network_data(Path(args.input))
+    df = load_network_data(Path(args.input), args.threshold)
     
-    print("Creating network graph...")
+    # Analyze similarity patterns
+    analyze_sequence_similarity(df)
+    
+    print("\nCreating network graph...")
     G = create_graph(df)
     
     print("Generating visualization...")

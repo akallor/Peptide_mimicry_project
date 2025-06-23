@@ -6,3 +6,6 @@
 
 #Install the FAIR ESM models
 !pip install fair-esm
+
+#Install all required dependencides for network analysis
+!pip install networkx pandas numpy plotly python-louvain scikit-learn

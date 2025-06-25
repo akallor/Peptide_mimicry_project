@@ -10,12 +10,22 @@ PATHOGEN_FASTA_GLOB = "/content/drive/MyDrive/Peptide_mimicry_project/pathogen_d
 TSV_FILE = "/content/drive/MyDrive/Peptide_mimicry_project/mipepbase_table_2.tsv"
 HUMAN_OUT = "/content/drive/MyDrive/Peptide_mimicry_project/human_verified_peptide_library.tsv"
 PATHOGEN_OUT = "/content/drive/MyDrive/Peptide_mimicry_project/pathogen_verified_peptide_library.tsv"
+SELECTED_PATHOGENS = ["Helicobacter pylori"]  # Default: only process this pathogen
 
 # --- 1. Read the table and extract relevant protein names ---
 df = pd.read_csv(TSV_FILE, sep="\t")
+
+# Always get all human proteins from the full table
 human_proteins = set(df[df["Host"] == "Human"]["Host Protein"].str.strip())
-pathogen_proteins = set(df["Pathogen Protein"].str.strip())
-pathogen_organism_map = dict(zip(df["Pathogen Protein"].str.strip(), df["Pathogen"].str.strip()))
+
+# For pathogens, filter if needed
+if SELECTED_PATHOGENS:
+    pathogen_df = df[df["Pathogen"].isin(SELECTED_PATHOGENS)]
+else:
+    pathogen_df = df
+
+pathogen_proteins = set(pathogen_df["Pathogen Protein"].str.strip())
+pathogen_organism_map = dict(zip(pathogen_df["Pathogen Protein"].str.strip(), pathogen_df["Pathogen"].str.strip()))
 
 # --- 2. Parse human proteome and extract matching proteins ---
 def extract_matching_proteins_from_fasta(fasta_path, protein_names):
@@ -50,7 +60,7 @@ def extract_pathogen_proteins(fasta_glob, protein_names):
 pathogen_matches = extract_pathogen_proteins(PATHOGEN_FASTA_GLOB, pathogen_proteins)
 
 # --- 4. Sliding window peptide extraction ---
-def sliding_window_peptides(seq, min_len=8, max_len=12):
+def sliding_window_peptides(seq, min_len=13, max_len=15):
     peptides = []
     for k in range(min_len, max_len+1):
         for i in range(len(seq) - k + 1):
